@@ -1,19 +1,21 @@
-name: astrbot_plugin_touhou_kb
-display_name: 东方知识库
-desc: 将 THBWiki 备用站词条清洗后导入 AstrBot 官方知识库，支持会话绑定、人格绑定与东方话题优先路由
+name: astrbot_plugin_game_kb
+display_name: 游戏知识库
+desc: 将东方Project、Blue Archive、Project SEKAI 的稳定文本资料抓取、解析后写入 AstrBot 官方知识库，支持自动初始化、统一同步和人格路由
 help: |
+  插件加载后会自动创建/复用启用的知识库，不需要初始化指令。
   常用指令：
-  1. /东方知识库初始化
-  2. /东方知识库状态
-  3. /东方知识库同步 [入口词条或URL] [页数]
-  4. /东方知识库绑定
-  5. /东方知识库绑定人格 [persona_id]
-author: YunMo-yanyu
-version: 0.3.1
-repo: https://github.com/YunMo-yanyu/astrbot-
+  1. /游戏知识库状态 [touhou|ba|pjsk]
+  2. /游戏知识库同步 <touhou|ba|pjsk> [数量] [入口/路径关键词]
+  3. /游戏知识库搜索 <touhou|ba|pjsk> <关键词>
+  4. /游戏知识库绑定人格 <touhou|ba|pjsk> [persona_id]
+  5. /游戏知识库人格列表
+author: YunMo-yanyu, lxlonlyn
+version: 0.5.0
+repo: https://github.com/lxlonlyn/astrbot-game-kb
 keywords:
   - 东方Project
-  - THBWiki
+  - Blue Archive
+  - Project SEKAI
   - 知识库
   - RAG
-  - 人格绑定
+  - 游戏

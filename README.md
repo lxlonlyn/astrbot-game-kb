@@ -1,274 +1,270 @@
-# astrbot_plugin_touhou_kb
+# astrbot_plugin_game_kb
 
-将 `THBWiki` 备用站词条抓取、清洗后导入 AstrBot 官方知识库，并支持会话绑定、人格绑定与东方相关话题的优先知识库路由。
+把原来的“东方知识库”插件抽象成一个通用的 **crawl → parse → storage** 游戏/ACG 文本知识库框架，目前内置：
 
-插件本身提供的是“抓取、清洗、导入、路由”能力，不直接附带现成的东方知识内容。安装后，需要先执行初始化或同步命令，把词条导入当前 AstrBot 的官方知识库；导入完成后，模型才能稳定使用这些内容回答相关问题。
+- **东方Project**：THBWiki
+- **Blue Archive / 蔚蓝档案**：`ba-archive/blue-archive`
+- **Project SEKAI / 世界计划**：`StarMoe-org/Moe-story` + `Sekai-World/sekai-master-db-cn-diff`
 
-## 适用场景
+插件仍然把知识写入 **AstrBot 官方知识库**，检索仍使用 AstrBot 原生 KB/RAG；本项目没有另建向量数据库，也没有修改 AstrBot 的知识库 schema。
 
-- 想让 AstrBot 更像“懂东方”的人设，优先参考 `THBWiki` 资料回答设定问题。
-- 想直接复用 AstrBot 官方知识库，而不是自己额外做一套 RAG 系统。
-- 想把知识库绑定到某个会话，或者直接绑定到某个人格，让多个会话共用同一套东方知识。
+## 设计目标
 
-## 功能概览
+### 1. 不再需要手动初始化
 
-- 自动抓取 `https://thbwiki.cc` 的词条页面。
-- 自动清洗正文，尽量过滤注释、脚注、导航框、站点装饰内容。
-- 单页导入或批量广度优先同步。
-- 支持把知识库绑定到当前会话。
-- 支持把知识库绑定到人格，供多个会话共享。
-- 在东方相关提问时，优先提示 LLM 使用当前知识库，减少先跑 Python、网页搜索之类竞争工具的概率。
-- 同步过程会输出 `info` 级日志，方便观察后台抓取和写库进度。
+插件加载完成后，会自动：
 
-## 安装前提
+1. 检查启用领域对应的 AstrBot 官方知识库；
+2. 不存在则自动创建；
+3. 如果知识库为空且 `auto_bootstrap=true`，自动后台同步一轮默认数据。
 
-使用前请先确认：
+因此不再提供 `/东方知识库初始化` 一类初始化指令。
 
-1. AstrBot 已启用官方知识库功能。
-2. 至少已经配置了一个可用的 `Embedding Provider`。
-3. 如果想启用重排，可额外配置一个 `Rerank Provider`。
-4. AstrBot 所在环境可以访问 `https://thbwiki.cc`。
+如果启动时还没有配置 Embedding Provider，插件只记录 warning，不会让 AstrBot 启动失败；配置好 Embedding Provider 后可重载插件，或使用 `/游戏知识库同步 ...`。
 
-说明：
+### 2. 组件尽量共用
 
-- `Embedding Provider` 是必须的，没有它无法创建知识库。
-- `Rerank Provider` 是可选的，没有也能用，只是检索排序能力会弱一些。
+代码分为三层：
 
-## 快速开始
+```text
+Source Adapter
+    │
+    ├─ crawl()   获取网页 / GitHub Raw / GitHub Tree
+    │
+    ├─ parse()   针对具体站点/数据格式转成自描述纯文本
+    │
+    ▼
+AstrBotKBStorage
+    │
+    ├─ 自动创建/复用 AstrBot 官方知识库
+    ├─ 按 doc_name upsert
+    └─ 调用 AstrBot 原生 retrieve()
+```
 
-推荐按下面的顺序完成首次配置：
+目录：
 
-1. 安装插件并启用。
-2. 打开插件设置，按下面的“插件设置说明”填写配置。
-3. 执行 `/东方知识库初始化`
-4. 如果知识库还是空的，插件会自动在后台开始同步默认入口词条。
-5. 用 `/东方知识库状态` 或 `/东方知识库任务` 观察同步进度。
-6. 同步出一定内容后，再根据需要执行：
-   - `/东方知识库绑定`
-   - `/东方知识库绑定人格`
+```text
+game_kb/
+├── core.py                 # RawDocument / ParsedDocument / 通用切片
+├── http.py                 # 共用 HTTP 客户端
+├── storage.py              # 共用 AstrBot KB 存储与检索
+├── cleaning.py             # 可选 AstrBot LLM 清洗
+└── adapters/
+    ├── base.py             # 新游戏/动漫 Adapter 接口
+    ├── touhou.py
+    ├── blue_archive.py
+    └── project_sekai.py
+```
 
-如果只想先确认插件能正常工作，通常只需要：
+未来添加新作品时，通常只需要实现新的 Adapter：
 
-- 配好 `Embedding Provider`
-- 执行 `/东方知识库初始化`
-- 等后台同步完成
+```python
+class NewGameAdapter(BaseAdapter):
+    async def crawl(...):
+        ...
 
-## 插件设置说明
+    def parse(...):
+        ...
+```
 
-建议按下面顺序完成插件设置。
+不需要复制知识库创建、上传、检索、路由等逻辑。
 
-### 1. 基础信息
+## 为什么只导入“稳定知识”
 
-- `kb_name`
-  - 官方知识库名称，默认值为 `东方Project知识库`。
-- `kb_description`
-  - 知识库描述，用来标识这套知识库的来源和用途。
+本插件刻意不把“当前卡池”“当前活动剩余时间”“排行榜”“当前/即将到来的 Raid”等实时状态写进长期 RAG。
 
-一般保持默认即可。
+对于 BA / PJSK，主要问题不是旧知识快速失效，而是不断出现新学生、新卡、新歌、新剧情。已经发布的角色资料、歌曲信息和历史剧情基本是稳定内容，因此最适合 AstrBot 的扁平文本知识库。
 
-### 2. 模型设置
+### Blue Archive 默认内容
 
+- 学生静态资料：`apps/blue-archive-story-editor/src/assets/students.json`
+- 剧情：`apps/blue-archive-story-viewer/public/story/`
+  - `main`
+  - `other`
+  - `event`
+  - `favor`
+- 默认明确排除 `public/story/ai/`，避免把 AI 生成摘要作为首选事实来源。
+- 不抓 `BlueArchiveAPI` 的 `current/upcoming` Raid、Banner 等实时状态。
+
+### Project SEKAI 默认内容
+
+稳定基础资料优先：
+
+- `Sekai-World/sekai-master-db-cn-diff`
+  - `gameCharacters.json` + `characterProfiles.json` 合并成角色资料
+  - `musics.json` 生成歌曲资料
+- `StarMoe-org/Moe-story`
+  - `worldview.txt`
+  - `character_nicknames.yaml`
+  - `story/event/event_map.csv`
+  - `story/self/**`
+  - `story/unit/**`
+  - `story/event/*/detail.json`
+  - `story/special/**`
+  - `story/card/**`
+
+默认不导入 `gachas.json`、实时活动状态、排名等短期信息。
+
+## 扁平知识库与“自描述文本”
+
+AstrBot 当前知识库适合扁平文本 RAG，因此本插件没有强行引入业务 metadata。
+
+Parser 会把对检索有意义的信息直接写入正文，例如：
+
+```text
+作品：Project SEKAI / 世界计划
+内容类型：角色资料
+角色ID：19
+姓名：东云绘名
+组合：25时，在Nightcord。
+CV：铃木实里
+...
+```
+
+以及：
+
+```text
+作品：Blue Archive / 蔚蓝档案
+内容类型：剧情（main）
+剧情GroupId：31010
+源文件：main/31010.json
+...
+```
+
+这些字段会和正文一起向量化/稀疏检索，仍完全兼容 AstrBot 官方 KB。
+
+## 自动路由
+
+插件会在每次 LLM 请求前检查：
+
+1. 当前人格是否绑定了某个游戏知识库；
+2. 用户文本是否命中该领域关键词。
+
+命中后直接调用 AstrBot `kb_manager.retrieve()`，并把少量相关结果作为本轮临时上下文追加给 LLM。
+
+人格绑定优先于关键词，因此可以实现：
+
+```text
+Arona / Plana 人格 -> Blue Archive
+Ena 人格          -> Project SEKAI
+```
+
+此时即使用户只问“她后来怎么了？”，只要当前人格已经绑定，对应 KB 仍会参与检索。
+
+## 可选 LLM 清洗
+
+专用 Parser 默认已经尽量清洗格式，因此 `enable_llm_cleaning` 默认关闭。
+
+如果未来接入普通网页、SPA 抓取结果或格式很脏的数据源，可以开启：
+
+```text
+enable_llm_cleaning = true
+cleaning_provider_id = <可选>
+```
+
+插件会调用 AstrBot 的聊天 Provider 做二次清洗，但提示模型：
+
+- 只能去噪；
+- 不总结；
+- 不补充外部事实；
+- 必须保留角色名、数字 ID、章节和来源语义。
+
+## 配置
+
+最常用的配置：
+
+- `enable_touhou`
+- `enable_blue_archive`
+- `enable_pjsk`
+- `auto_bootstrap`
+- `touhou_bootstrap_limit`
+- `ba_bootstrap_limit`
+- `pjsk_bootstrap_limit`
 - `default_embedding_provider_id`
-  - 默认向量模型 Provider ID。
-  - 留空时，会自动选择 AstrBot 当前第一个可用的 Embedding Provider。
-  - 如果存在多个 Embedding Provider，建议显式填写，避免后续 provider 顺序变化导致切换。
-
 - `default_rerank_provider_id`
-  - 默认重排模型 Provider ID。
-  - 留空时，会自动选择 AstrBot 当前第一个可用的 Rerank Provider。
-  - 如果当前没有可用的 Rerank Provider，则不会启用 rerank，插件仍可正常工作。
-
-如何查找 Provider ID：
-
-1. 打开 AstrBot 的模型或 Provider 管理页面。
-2. 找到你已经配置好的 embedding / rerank 模型。
-3. 复制对应的 provider ID，填进插件设置。
-
-建议：
-
-- 只有一个 Embedding Provider 时，`default_embedding_provider_id` 可以留空。
-- 有多个 Embedding Provider 时，建议显式填写。
-- Rerank 模型还没准备好时，可以先留空，先把知识库跑起来。
-
-### 3. 同步入口与同步规模
-
-- `default_entry_page`
-  - 默认入口词条，默认是 `东方Project`。
-- `default_sync_limit`
-  - 后台批量同步时，默认最多抓取多少页。
-
-建议：
-
-- 初次使用先保持默认。
-- 如果同步结果不错，再手动执行 `/东方知识库同步 东方Project 80` 之类的命令扩充范围。
-
-### 4. 抓取与上传参数
-
-- `request_timeout_sec`
-  - 单个页面请求超时时间。
-- `crawl_delay_ms`
-  - 页面之间的抓取间隔。
-- `http_user_agent`
-  - 抓取用 UA。
-- `http_proxy`
-  - 代理地址，留空表示不用代理。
+- `session_top_k`
 - `pre_chunk_max_chars`
-  - 预切片单块最大字符数。
 - `pre_chunk_overlap`
-  - 预切片块重叠字符数。
-- `upload_batch_size`
-  - 单次向量化上传的批大小。
-- `upload_tasks_limit`
-  - 单次文档上传时的并发任务数。
-
-如果使用的 Embedding 服务容易超时或报 `400`，优先把下面两个参数调小：
-
 - `upload_batch_size`
 - `upload_tasks_limit`
 
-通常先保持：
-
-- `upload_batch_size = 4`
-- `upload_tasks_limit = 1`
-
-会更稳。
-
-### 5. 自动化行为
-
-- `auto_sync_after_init`
-  - 初始化后如果知识库为空，是否自动后台同步。
-- `auto_bind_after_init`
-  - 初始化、导入或同步后，是否自动把当前会话绑定到这个知识库。
-
-说明：
-
-- 知识库本身是全局共享的。
-- “自动绑定当前会话”只影响当前聊天，不会修改其他会话。
-
-### 6. 路由相关设置
-
-- `enable_routing_hint`
-  - 东方相关话题时，是否给 LLM 注入优先参考知识库的提示。
-- `remove_competing_tools`
-  - 命中知识库路由时，是否临时移除 Python、网页搜索等竞争工具。
-
-建议默认开启，这样更容易让模型先用知识库回答东方设定问题。
-
-### 7. 噪音过滤
-
-- `sync_exclude_title_keywords`
-  - 按标题关键词排除页面。
-- `sync_exclude_category_keywords`
-  - 按分类关键词排除页面。
-
-默认已经过滤一批比较容易污染设定知识库的页面，比如：
-
-- `LostWord`
-- `大炮弹`
-- `例大祭`
-- `捏他列表`
-- 部分现实人物 / 同人画师 / 商业二创手游相关页面
-
-如果希望知识库更偏向“原作设定向”，可以继续补充自己的过滤词。
+默认首次同步上限均为 40。注意：BA 学生目录、PJSK 角色目录和歌曲目录本身会生成多个文本块，因此“40”表示源文档数量，不等于最终向量块数量。
 
 ## 指令
 
-- `/东方知识库初始化 [embedding_provider_id]`
-  - 创建或复用知识库；如果知识库还是空的，会自动在后台开始同步默认入口词条。
-- `/东方知识库绑定 [top_k]`
-  - 把当前会话绑定到东方知识库。
-- `/东方知识库绑定人格 [persona_id]`
-  - 把指定人格绑定到东方知识库；不传 `persona_id` 时默认绑定当前生效人格。
-- `/东方知识库解绑`
-  - 把当前会话从东方知识库解绑。
-- `/东方知识库解绑人格 [persona_id]`
-  - 解除指定人格的东方知识库绑定；不传 `persona_id` 时默认解绑当前生效人格。
-- `/东方知识库人格列表`
-  - 查看已绑定的人格列表，以及当前会话当前生效的人格。
-- `/东方知识库状态`
-  - 查看知识库统计、当前会话绑定情况、当前人格绑定情况和最近任务状态。
-- `/东方知识库导入 [词条名或URL]`
-  - 导入单个词条，默认是 `东方Project`。
-- `/东方知识库同步 [入口词条或URL] [页数]`
-  - 从入口词条开始广度优先抓取并导入多个页面，默认页数由插件配置控制。
-- `/东方知识库任务 [task_id]`
-  - 查看最近一次或指定任务的同步状态。
-- `/东方知识库搜索 [关键词]`
-  - 直接测试官方知识库检索结果。
+### 状态
 
-## 推荐使用方式
+```text
+/游戏知识库状态
+/游戏知识库状态 ba
+/游戏知识库状态 pjsk
+/游戏知识库状态 touhou
+```
 
-### 方案一：只给当前群或当前会话用
+### 手动扩充/刷新
 
-1. `/东方知识库初始化`
-2. 等后台同步一部分内容
-3. `/东方知识库绑定`
+```text
+/游戏知识库同步 touhou 80 东方Project
+/游戏知识库同步 ba 80
+/游戏知识库同步 pjsk 80
+```
 
-适合只想在某个群或某个私聊里启用东方知识库的场景。
+对于 GitHub 数据源，第三个参数主要作为路径/数字 ID 过滤器使用，例如：
 
-### 方案二：给某个人格全局使用
+```text
+/游戏知识库同步 pjsk 20 1234
+```
 
-1. `/东方知识库初始化`
-2. 等同步完成或至少有一部分可用内容
-3. `/东方知识库绑定人格 人格ID`
+会优先寻找路径中与 `1234` 对应的卡牌/活动/角色资料。
 
-适合多个会话共用同一个东方人设的场景。
+### 测试检索
 
-### 方案三：持续扩充知识库
+```text
+/游戏知识库搜索 ba 阿洛娜
+/游戏知识库搜索 pjsk 东云绘名
+/游戏知识库搜索 touhou 博丽灵梦
+```
 
-1. 先 `/东方知识库初始化`
-2. 默认后台同步一轮
-3. 再手动执行 `/东方知识库同步 东方Project 80`
-4. 需要时补一些单页导入：
-   - `/东方知识库导入 博丽灵梦`
-   - `/东方知识库导入 红魔乡`
+### 人格绑定
 
-## 日志与排错
+```text
+/游戏知识库绑定人格 ba <persona_id>
+/游戏知识库绑定人格 pjsk <persona_id>
+/游戏知识库解绑人格 ba <persona_id>
+/游戏知识库人格列表
+```
 
-同步过程会输出 `info` 级日志，便于确认任务是否正在运行。
+不传 `persona_id` 时，默认使用当前生效人格。
 
-你通常能在日志里看到这些阶段：
+### 东方兼容指令
 
-- 同步任务已创建
-- 后台同步开始
-- 正在抓取哪个页面
-- 哪些页面被跳过，以及跳过原因
-- 哪些页面成功写入知识库
-- 最终新增 / 更新 / 失败统计
+保留：
 
-建议直接搜索这些日志关键字：
+```text
+/东方知识库状态
+/东方知识库同步 [入口] [数量]
+/东方知识库搜索 <关键词>
+```
 
-- `东方知识库`
-- `同步任务已创建`
-- `后台同步开始`
-- `同步写入页面`
-- `后台同步完成`
+不再保留初始化指令，因为初始化已自动完成。
 
-如果初始化失败，优先检查：
+## 数据源与边界
 
-1. AstrBot 是否已经配置至少一个可用的 `Embedding Provider`
-2. `default_embedding_provider_id` 是否填错
-3. `default_rerank_provider_id` 是否填成了不存在的 provider ID
-4. AstrBot 机器是否能访问 `https://thbwiki.cc`
-5. embedding 服务是否因为批量太大导致超时或报错
+- 东方：<https://thbwiki.cc/>
+- Blue Archive 剧情站：<https://github.com/ba-archive/blue-archive>
+- PJSK 剧情资源：<https://github.com/StarMoe-org/Moe-story>
+- PJSK master data：<https://github.com/Sekai-World/sekai-master-db-cn-diff>
 
-如果同步慢、超时多、上传失败较多，优先尝试：
+本插件只提供抓取、解析和导入能力，不把这些上游内容直接打包进插件。各游戏文本、名称、剧情与素材仍归原权利人/数据源贡献者所有；公开再分发时请自行检查对应上游条款。
 
-1. 降低 `upload_batch_size`
-2. 把 `upload_tasks_limit` 保持为 `1`
-3. 适当提高 `request_timeout_sec`
-4. 视网络情况设置 `http_proxy`
+## 已知限制
 
-## 说明
-
-- 默认抓取站点是 `https://thbwiki.cc`。
-- 知识来源和站点结构可能发生变化，必要时需要调整清洗规则。
-- 这个插件更适合做“东方设定知识增强”，不是严格意义上的全站镜像工具。
-- 如果你希望模型更稳定地优先调用东方知识库，建议同时：
-  - 打开 `enable_routing_hint`
-  - 打开 `remove_competing_tools`
-  - 把知识库绑定到常用人格
+- 当前仍是纯文本知识库，不解决图片/卡面识别。
+- GitHub Adapter 通过公开 Tree/Raw 接口获取数据；大规模频繁同步可能受到 GitHub 未认证请求限额影响。
+- BA 剧情 JSON 的中文文本可直接提取，但部分原始脚本中的说话人标识是韩文/脚本控制字段；第一版以干净中文正文为主，不强行猜测角色归属。
+- PJSK 目前优先使用已经整理好的剧情文本与简中 master data，不导入实时卡池、排名等状态。
+- 第一版没有实现“低 RAG 分数自动联网补抓”的 query-time lazy search；目前的自动行为是“启动时空库 bootstrap + 手动同步扩充”。这是刻意保持与原东方插件接近、避免过度设计的结果。
 
 ## 开源协议
 
-本项目采用 `MIT License`。
+沿用原仓库 MIT License。
