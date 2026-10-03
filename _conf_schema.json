@@ -30,7 +30,7 @@
     "default": "Project SEKAI知识库"
   },
   "auto_bootstrap": {
-    "description": "插件加载后自动创建/复用知识库；若某个启用知识库为空，则自动抓取一轮默认内容，无需执行初始化指令",
+    "description": "插件加载后总会自动创建/复用已启用的官方知识库；此开关仅控制空库是否自动抓取第一批内容",
     "type": "bool",
     "default": true
   },
@@ -138,5 +138,10 @@
     "description": "额外 PJSK 路由关键词，逗号或换行分隔",
     "type": "string",
     "default": ""
+  },
+  "query_bootstrap_limit": {
+    "description": "若热加载或首次提问时命中的知识库仍为空，本轮提问前最多同步多少个源文档，用于兜底创建可用内容",
+    "type": "int",
+    "default": 20
   }
 }

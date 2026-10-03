@@ -36,6 +36,12 @@ BLUE_ARCHIVE_KEYWORDS = (
     "阿洛娜", "arona", "普拉娜", "plana", "白子", "砂狼白子", "星野", "小鸟游星野",
     "爱露", "日奈", "圣三一", "格黑娜", "千年科技学院", "千年", "阿比多斯", "夏莱",
     "什亭之匣", "总力战",
+    # 常见学校 / 社团名也必须能触发路由；否则“补习部有哪些成员”这类自然问题
+    # 在没有显式提到游戏名时不会进入 BA 知识库。
+    "补习部", "補習授業部", "补习授业部", "对策委员会", "便利屋68", "风纪委员会",
+    "美食研究会", "游戏开发部", "真理部", "正义实现委员会", "茶会", "修女会",
+    "救护骑士团", "放学后甜点部", "百鬼夜行", "山海经", "红冬", "srt", "瓦尔基里",
+    "阿里乌斯", "联邦学生会",
 )
 
 PJSK_KEYWORDS = (
@@ -218,7 +224,7 @@ class Main(Star):
     async def _routed_domain_ids(
         self,
         event: AstrMessageEvent,
-        request: ProviderRequest,
+        request: ProviderRequest | None,
         query: str,
     ) -> list[str]:
         routed: list[str] = []
@@ -324,26 +330,124 @@ class Main(Star):
         job.add_done_callback(_cleanup)
         return task
 
-    async def _bootstrap(self) -> None:
-        if not self._cfg_bool("auto_bootstrap", True):
+    def _schedule_bootstrap(self) -> None:
+        """Schedule creation/bootstrap exactly once for the current plugin instance."""
+        if self._bootstrap_job and not self._bootstrap_job.done():
             return
+        logger.info("游戏知识库：计划自动创建/复用已启用领域的 AstrBot 官方知识库。")
+        self._bootstrap_job = asyncio.create_task(
+            self._bootstrap(),
+            name="game-kb-auto-bootstrap",
+        )
+
+    async def _bootstrap(self) -> None:
+        # “免初始化”意味着知识库创建本身不受 auto_bootstrap 控制。
+        # auto_bootstrap 只决定空库是否继续抓取第一批内容。
+        auto_bootstrap = self._cfg_bool("auto_bootstrap", True)
         for domain_id, domain in self.domains.items():
             if not domain.enabled:
                 continue
             try:
-                kb, _ = await self.storage.ensure_kb(domain)
-                if kb.kb.doc_count == 0 and kb.kb.chunk_count == 0:
-                    logger.info("知识库为空，自动引导同步: domain=%s limit=%s", domain_id, domain.bootstrap_limit)
-                    await self._sync_domain(domain_id, limit=domain.bootstrap_limit)
+                kb, created = await self.storage.ensure_kb(domain)
+                logger.info(
+                    "游戏知识库已就绪: domain=%s kb=%s created=%s docs=%s chunks=%s",
+                    domain_id,
+                    domain.kb_name,
+                    created,
+                    kb.kb.doc_count,
+                    kb.kb.chunk_count,
+                )
+                if (
+                    auto_bootstrap
+                    and kb.kb.doc_count == 0
+                    and kb.kb.chunk_count == 0
+                ):
+                    logger.info(
+                        "知识库为空，自动引导同步: domain=%s limit=%s",
+                        domain_id,
+                        domain.bootstrap_limit,
+                    )
+                    await self._sync_domain(
+                        domain_id,
+                        limit=domain.bootstrap_limit,
+                    )
             except Exception as exc:
                 # Most commonly no embedding provider yet. Do not make plugin startup fail.
-                logger.warning("游戏知识库自动初始化暂未完成: domain=%s error=%s", domain_id, exc)
+                logger.warning(
+                    "游戏知识库自动初始化暂未完成: domain=%s error=%s",
+                    domain_id,
+                    exc,
+                )
+
+    async def initialize(self) -> None:
+        """AstrBot calls initialize() every time this plugin is loaded/reloaded."""
+        self._schedule_bootstrap()
 
     @filter.on_astrbot_loaded()
     async def on_astrbot_loaded(self) -> None:
-        if self._bootstrap_job and not self._bootstrap_job.done():
+        # Full-process startup fallback.  Hot-reload is handled by initialize().
+        self._schedule_bootstrap()
+
+    async def _ensure_domain_ready_for_query(
+        self,
+        domain_id: str,
+        query: str,
+    ) -> None:
+        """Create an absent KB and bootstrap an empty KB before the main LLM request.
+
+        This is deliberately a narrow lazy behaviour: a normal question does not
+        rewrite a non-empty KB.  It only repairs the “plugin was hot-loaded / KB
+        not created yet / previous bootstrap failed” case.
+        """
+        domain = self.domains[domain_id]
+        kb, _ = await self.storage.ensure_kb(domain)
+        if kb.kb.doc_count or kb.kb.chunk_count:
             return
-        self._bootstrap_job = asyncio.create_task(self._bootstrap(), name="game-kb-auto-bootstrap")
+        if not self._cfg_bool("auto_bootstrap", True):
+            return
+
+        running = self.running_jobs.get(domain_id)
+        if running and not running.done():
+            await running
+            return
+
+        limit = max(
+            1,
+            min(
+                self._cfg_int(
+                    "query_bootstrap_limit",
+                    min(domain.bootstrap_limit, 20),
+                ),
+                500,
+            ),
+        )
+        task = self._start_sync(domain_id, limit=limit)
+        job = self.running_jobs.get(domain_id)
+        logger.info(
+            "游戏知识库查询触发空库引导: domain=%s query=%s task=%s limit=%s",
+            domain_id,
+            query[:120],
+            task.task_id,
+            limit,
+        )
+        if job:
+            await job
+
+    @filter.on_waiting_llm_request()
+    async def ensure_game_kb_before_llm(self, event: AstrMessageEvent) -> None:
+        """Retry missing/empty domain KBs before AstrBot builds the main request."""
+        if not self._cfg_bool("enable_routing", True):
+            return
+        query = self._sanitize_query(event.message_str or "")
+        if not query:
+            return
+        try:
+            domain_ids = await self._routed_domain_ids(event, None, query)
+            for domain_id in domain_ids:
+                await self._ensure_domain_ready_for_query(domain_id, query)
+        except Exception as exc:
+            # Never block an ordinary chat because a source is temporarily unavailable.
+            logger.warning("游戏知识库查询前引导失败: query=%s error=%s", query[:120], exc)
 
     @filter.on_llm_request()
     async def inject_game_knowledge(
