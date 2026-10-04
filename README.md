@@ -19,6 +19,18 @@ AstrBot 的 `on_astrbot_loaded` 只在整个 AstrBot 完成启动时触发；仅
 
 这个兜底**不是“每问一句都重抓数据”**：非空知识库不会因为普通提问而重写。
 
+## 0.5.2：GitHub 加速与抓取重试
+
+BA / PJSK 的稳定资料主要来自 GitHub。部分部署环境可以正常使用 AstrBot 本身的 GitHub 加速地址，却无法稳定直连 `raw.githubusercontent.com` 或 `api.github.com`。本版本把这项能力下沉到共用 HTTP 层：
+
+- 新增 `github_proxy_url`：填写 AstrBot「设置 → 网络 → GitHub 加速地址」中同样的 URL 前缀即可；
+- 新增 `github_proxy_fallback_direct`：加速地址连续失败后自动回退 GitHub 直连，默认开启；
+- `github.com`、`raw.githubusercontent.com`、`api.github.com` 请求统一经过同一套逻辑，BA/PJSK Adapter 不各自处理代理；
+- 对连接超时、读取超时、代理错误、429/5xx 等瞬时失败做有限重试与指数退避；
+- 共用一个 `httpx.AsyncClient` 连接池，不再为每个文件重复建立 TLS 连接；
+- GitHub API URL 的 query string 会编码进代理路径，例如 `?recursive=1` 不会被 URL 前缀代理自身吞掉。
+
+`github_proxy_url` 与 `http_proxy` 含义不同：前者是 AstrBot 风格的 GitHub URL 前缀加速服务，后者仍然是普通 HTTP(S) 网络代理。两者都留空时保持原来的直连行为。
 ## 设计目标
 
 ### 1. 不再需要手动初始化
@@ -198,6 +210,8 @@ cleaning_provider_id = <可选>
 - `pre_chunk_overlap`
 - `upload_batch_size`
 - `upload_tasks_limit`
+- `github_proxy_url`
+- `github_proxy_fallback_direct`
 
 默认首次同步上限均为 40。注意：BA 学生目录、PJSK 角色目录和歌曲目录本身会生成多个文本块，因此“40”表示源文档数量，不等于最终向量块数量。
 

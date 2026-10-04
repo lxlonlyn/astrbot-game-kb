@@ -104,6 +104,16 @@
     "type": "string",
     "default": ""
   },
+  "github_proxy_url": {
+    "description": "GitHub URL 前缀加速地址；可填写与 AstrBot 设置 → 网络 → GitHub 加速地址相同的值。仅作用于 github.com、raw.githubusercontent.com、api.github.com 等 GitHub 请求；留空直连",
+    "type": "string",
+    "default": ""
+  },
+  "github_proxy_fallback_direct": {
+    "description": "GitHub 加速地址连续请求失败后是否回退 GitHub 直连；建议保持开启",
+    "type": "bool",
+    "default": true
+  },
   "pre_chunk_max_chars": {
     "description": "插件预切片时单块最大字符数",
     "type": "int",

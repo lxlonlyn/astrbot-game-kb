@@ -10,7 +10,7 @@ help: |
   4. /游戏知识库绑定人格 <touhou|ba|pjsk> [persona_id]
   5. /游戏知识库人格列表
 author: YunMo-yanyu, lxlonlyn
-version: 0.5.1
+version: 0.5.2
 repo: https://github.com/lxlonlyn/astrbot-game-kb
 keywords:
   - 东方Project

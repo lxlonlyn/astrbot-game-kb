@@ -67,6 +67,11 @@ class Main(Star):
                     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
                 ),
                 proxy=self._cfg_str("http_proxy", ""),
+                github_proxy_url=self._cfg_str("github_proxy_url", ""),
+                github_proxy_fallback_direct=self._cfg_bool(
+                    "github_proxy_fallback_direct",
+                    True,
+                ),
             )
         )
         self.domains = self._build_domains()
@@ -688,3 +693,4 @@ class Main(Star):
         if jobs:
             await asyncio.gather(*jobs, return_exceptions=True)
         self.running_jobs.clear()
+        await self.http.aclose()
