@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -50,24 +50,23 @@ def is_github_url(url: str) -> bool:
 
 
 def wrap_github_url(url: str, proxy_url: str) -> str:
-    """Wrap a GitHub URL with an AstrBot-style URL-prefix proxy.
+    """Wrap a GitHub URL exactly like AstrBot GitHub URL-prefix proxy.
 
-    The whole target URL is carried inside the proxy path. Query-string
-    delimiters are percent-encoded so proxies such as astrbot2github receive
-    ?recursive=1 as part of the target URL rather than as the proxy service's
-    own query string.
+    GH-Proxy and AstrBot expect a literal target URL after the proxy prefix,
+    for example:
+
+        https://gh-proxy.org/https://api.github.com/repos/owner/repo?x=1
+
+    Do not percent-encode the embedded scheme or query string here. Encoding
+    the query delimiter caused some GH-Proxy nodes to normalize the embedded
+    https:// path incorrectly as https:/... and return 404.
     """
 
     target = str(url or "").strip()
     proxy = str(proxy_url or "").strip().rstrip("/")
     if not target or not proxy:
         return target
-
-    # Keep scheme/path separators readable while encoding ?, &, =, # and an
-    # already-escaped '%' safely. A compatible prefix proxy decodes the path
-    # once before fetching the target URL.
-    encoded_target = quote(target, safe=":/@")
-    return f"{proxy}/{encoded_target}"
+    return f"{proxy}/{target}"
 
 
 @dataclass(slots=True)

@@ -1,6 +1,4 @@
 import asyncio
-from urllib.parse import unquote
-
 import httpx
 import pytest
 
@@ -14,13 +12,23 @@ def test_is_github_url():
     assert not is_github_url("https://thbwiki.cc/")
 
 
-def test_wrap_github_url_preserves_target_query_inside_proxy_path():
+def test_wrap_github_url_matches_astrbot_prefix_style_and_keeps_query():
     target = "https://api.github.com/repos/owner/repo/git/trees/main?recursive=1"
     wrapped = wrap_github_url(target, "https://proxy.example/")
-    assert wrapped.startswith("https://proxy.example/https://api.github.com/")
-    assert "%3Frecursive%3D1" in wrapped
-    encoded_target = wrapped.removeprefix("https://proxy.example/")
-    assert unquote(encoded_target) == target
+    assert wrapped == (
+        "https://proxy.example/"
+        "https://api.github.com/repos/owner/repo/git/trees/main?recursive=1"
+    )
+    assert "%3F" not in wrapped
+    assert "/https://api.github.com/" in wrapped
+
+
+def test_httpx_does_not_collapse_embedded_https_prefix():
+    target = "https://api.github.com/repos/owner/repo/git/trees/main?recursive=1"
+    wrapped = wrap_github_url(target, "https://proxy.example")
+    request = httpx.Request("GET", wrapped)
+    assert str(request.url) == wrapped
+    assert request.url.raw_path.startswith(b"/https://api.github.com/")
 
 
 def test_github_proxy_retries_then_falls_back_to_direct():

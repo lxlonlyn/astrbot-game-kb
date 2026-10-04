@@ -31,6 +31,14 @@ BA / PJSK 的稳定资料主要来自 GitHub。部分部署环境可以正常使
 - GitHub API URL 的 query string 会编码进代理路径，例如 `?recursive=1` 不会被 URL 前缀代理自身吞掉。
 
 `github_proxy_url` 与 `http_proxy` 含义不同：前者是 AstrBot 风格的 GitHub URL 前缀加速服务，后者仍然是普通 HTTP(S) 网络代理。两者都留空时保持原来的直连行为。
+## 0.6.1：修复 GitHub 加速 URL 构造
+
+修复 GitHub API 经 URL 前缀加速时出现 `https:/api.github.com`、随后返回 404 并回退直连的问题。
+
+- GitHub 加速地址现在完全采用 AstrBot / GH-Proxy 的字面前缀形式：`<proxy>/<完整 GitHub URL>`；
+- 不再把目标 URL 的 `?recursive=1` 编码成 `%3Frecursive%3D1`；
+- 增加测试，确认 `httpx` 构造请求后仍保留 `/https://api.github.com/` 和原始 query string；
+- 直连回退逻辑保持不变。
 ## 0.6.0：BA 剧情修复与多源补充
 
 这一版修复了 BA “只有 students_catalog、没有剧情”的根因：
