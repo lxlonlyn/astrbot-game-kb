@@ -74,18 +74,22 @@ def test_ba_students_parse_flattens_stable_fields():
     assert "阿比多斯" in docs[0].chunks[0]
 
 
-def test_ba_story_parse_uses_cn_text_and_drops_markup():
+def test_ba_story_parse_uses_current_dict_payload():
     adapter = BlueArchiveAdapter(cfg("blue_archive", "Blue Archive"))
-    rows = [
-        {"GroupId": 11000, "TextCn": "[FF6666]欢迎访问「什亭之匣」[-]，[USERNAME]老师。"},
-        {"GroupId": 11000, "TextCn": ""},
-        {"GroupId": 11000, "TextCn": "拜托了。"},
-    ]
+    payload = {
+        "proofreader": "",
+        "GroupId": 11000,
+        "content": [
+            {"GroupId": 11000, "TextCn": "[FF6666]欢迎访问「什亭之匣」[-]，[USERNAME]老师。"},
+            {"GroupId": 11000, "TextCn": ""},
+            {"GroupId": 11000, "TextCn": "拜托了。"},
+        ],
+    }
     raw = RawDocument(
         "main/11000.json",
         "story",
         "https://example/11000.json",
-        json.dumps(rows, ensure_ascii=False),
+        json.dumps(payload, ensure_ascii=False),
         "ba_story",
         {"relative_path": "main/11000.json"},
     )
@@ -95,6 +99,96 @@ def test_ba_story_parse_uses_cn_text_and_drops_markup():
     assert "剧情GroupId：11000" in joined
     assert "欢迎访问「什亭之匣」，老师。" in joined
     assert "FF6666" not in joined
+
+
+def test_ba_story_parse_keeps_legacy_list_payload_compatibility():
+    adapter = BlueArchiveAdapter(cfg("blue_archive", "Blue Archive"))
+    raw = RawDocument(
+        "main/11000.json",
+        "story",
+        "https://example/11000.json",
+        json.dumps(
+            [{"GroupId": 11000, "TextCn": "旧格式仍可解析。"}],
+            ensure_ascii=False,
+        ),
+        "ba_story",
+        {"relative_path": "main/11000.json"},
+    )
+    docs = adapter.parse(raw)
+    assert len(docs) == 1
+    assert "旧格式仍可解析" in "\n".join(docs[0].chunks)
+
+
+def test_ba_upstream_story_prefers_tw_when_cn_is_missing():
+    adapter = BlueArchiveAdapter(cfg("blue_archive", "Blue Archive"))
+    raw = RawDocument(
+        "electricgoat:main:59999",
+        "upstream",
+        "https://raw.githubusercontent.com/electricgoat/ba-data/global/Excel/ScenarioScriptMain5ExcelTable.json",
+        json.dumps(
+            [
+                {
+                    "GroupId": 59999,
+                    "TextJp": "日本語",
+                    "TextTw": "國際服繁體劇情",
+                    "TextEn": "English",
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        "ba_upstream_story",
+        {
+            "category": "main",
+            "group_id": "59999",
+            "table": "Excel/ScenarioScriptMain5ExcelTable.json",
+        },
+    )
+    docs = adapter.parse(raw)
+    assert len(docs) == 1
+    joined = "\n".join(docs[0].chunks)
+    assert "國際服繁體劇情" in joined
+    assert "文本语言：繁体中文" in joined
+    assert docs[0].doc_name.startswith("upstream_main_59999")
+
+
+def test_ba_bootstrap_requires_story_not_only_students():
+    adapter = BlueArchiveAdapter(cfg("blue_archive", "Blue Archive"))
+    assert not adapter.bootstrap_complete({"students_catalog.txt"})
+    assert adapter.bootstrap_complete(
+        {"students_catalog.txt", "story_main_11000_json.txt"}
+    )
+
+
+def test_ba_gamekee_page_is_flattened_as_fallback_text():
+    adapter = BlueArchiveAdapter(cfg("blue_archive", "Blue Archive"))
+    html = """
+    <html>
+      <head><title>测试页面 - GameKee</title></head>
+      <body>
+        <nav>导航噪声</nav>
+        <article>
+          <h1>对策委员会篇 第3章</h1>
+          <p>这是剧情页面的稳定正文，并且这里故意写得稍微长一些，确保测试内容节点会被优先选中。</p>
+          <p>白子与星野继续行动，老师也参与其中，页面正文应被保留而导航和脚本应被移除。</p>
+        </article>
+        <script>noise()</script>
+      </body>
+    </html>
+    """
+    raw = RawDocument(
+        "gamekee:test",
+        "GameKee",
+        "https://www.gamekee.com/ba/123456.html",
+        html,
+        "ba_gamekee",
+    )
+    docs = adapter.parse(raw)
+    assert len(docs) == 1
+    joined = "\n".join(docs[0].chunks)
+    assert "GameKee Wiki 补充页面" in joined
+    assert "对策委员会篇 第3章" in joined
+    assert "剧情页面的稳定正文" in joined
+    assert "导航噪声" not in joined
 
 
 def test_pjsk_character_master_merges_name_and_profile():

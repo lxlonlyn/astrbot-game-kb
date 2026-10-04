@@ -345,6 +345,16 @@ class Main(Star):
             name="game-kb-auto-bootstrap",
         )
 
+    async def _domain_bootstrap_complete(
+        self,
+        domain_id: str,
+        kb_helper,
+    ) -> bool:
+        """Let each adapter decide whether the seed KB is actually usable."""
+
+        existing = await self.storage.list_document_map(kb_helper)
+        return self.adapters[domain_id].bootstrap_complete(set(existing))
+
     async def _bootstrap(self) -> None:
         # “免初始化”意味着知识库创建本身不受 auto_bootstrap 控制。
         # auto_bootstrap 只决定空库是否继续抓取第一批内容。
@@ -354,21 +364,22 @@ class Main(Star):
                 continue
             try:
                 kb, created = await self.storage.ensure_kb(domain)
+                bootstrap_complete = await self._domain_bootstrap_complete(
+                    domain_id,
+                    kb,
+                )
                 logger.info(
-                    "游戏知识库已就绪: domain=%s kb=%s created=%s docs=%s chunks=%s",
+                    "游戏知识库已就绪: domain=%s kb=%s created=%s docs=%s chunks=%s bootstrap_complete=%s",
                     domain_id,
                     domain.kb_name,
                     created,
                     kb.kb.doc_count,
                     kb.kb.chunk_count,
+                    bootstrap_complete,
                 )
-                if (
-                    auto_bootstrap
-                    and kb.kb.doc_count == 0
-                    and kb.kb.chunk_count == 0
-                ):
+                if auto_bootstrap and not bootstrap_complete:
                     logger.info(
-                        "知识库为空，自动引导同步: domain=%s limit=%s",
+                        "知识库引导内容不完整，自动补充同步: domain=%s limit=%s",
                         domain_id,
                         domain.bootstrap_limit,
                     )
@@ -398,15 +409,15 @@ class Main(Star):
         domain_id: str,
         query: str,
     ) -> None:
-        """Create an absent KB and bootstrap an empty KB before the main LLM request.
+        """Create the KB and repair an incomplete bootstrap before the LLM request.
 
-        This is deliberately a narrow lazy behaviour: a normal question does not
-        rewrite a non-empty KB.  It only repairs the “plugin was hot-loaded / KB
-        not created yet / previous bootstrap failed” case.
+        This remains deliberately narrow lazy behaviour: normal questions do not
+        rewrite a complete KB.  Each adapter only declares what minimum seed
+        documents prove that bootstrap actually succeeded.
         """
         domain = self.domains[domain_id]
         kb, _ = await self.storage.ensure_kb(domain)
-        if kb.kb.doc_count or kb.kb.chunk_count:
+        if await self._domain_bootstrap_complete(domain_id, kb):
             return
         if not self._cfg_bool("auto_bootstrap", True):
             return
@@ -440,7 +451,7 @@ class Main(Star):
 
     @filter.on_waiting_llm_request()
     async def ensure_game_kb_before_llm(self, event: AstrMessageEvent) -> None:
-        """Retry missing/empty domain KBs before AstrBot builds the main request."""
+        """Retry missing/incomplete domain KBs before AstrBot builds the main request."""
         if not self._cfg_bool("enable_routing", True):
             return
         query = self._sanitize_query(event.message_str or "")

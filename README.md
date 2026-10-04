@@ -3,7 +3,7 @@
 把原来的“东方知识库”插件抽象成一个通用的 **crawl → parse → storage** 游戏/ACG 文本知识库框架，目前内置：
 
 - **东方Project**：THBWiki
-- **Blue Archive / 蔚蓝档案**：`ba-archive/blue-archive`
+- **Blue Archive / 蔚蓝档案**：`ba-archive/blue-archive` + `electricgoat/ba-data`，并支持 GameKee 单页补充
 - **Project SEKAI / 世界计划**：`StarMoe-org/Moe-story` + `Sekai-World/sekai-master-db-cn-diff`
 
 插件仍然把知识写入 **AstrBot 官方知识库**，检索仍使用 AstrBot 原生 KB/RAG；本项目没有另建向量数据库，也没有修改 AstrBot 的知识库 schema。
@@ -31,6 +31,29 @@ BA / PJSK 的稳定资料主要来自 GitHub。部分部署环境可以正常使
 - GitHub API URL 的 query string 会编码进代理路径，例如 `?recursive=1` 不会被 URL 前缀代理自身吞掉。
 
 `github_proxy_url` 与 `http_proxy` 含义不同：前者是 AstrBot 风格的 GitHub URL 前缀加速服务，后者仍然是普通 HTTP(S) 网络代理。两者都留空时保持原来的直连行为。
+## 0.6.0：BA 剧情修复与多源补充
+
+这一版修复了 BA “只有 students_catalog、没有剧情”的根因：
+
+- `ba-archive/blue-archive` 当前剧情 JSON 顶层是对象，正文位于 `content[]`；旧 Parser 只接受顶层数组，导致剧情下载成功后被静默跳过。现在同时兼容对象和旧数组格式。
+- BA 的 bootstrap 不再以“知识库非空”为完成条件。只有 `students_catalog.txt` 时仍视为引导不完整，至少出现一个剧情文档后才停止自动补库。
+- 保留 `ba-archive` 作为优先简中历史剧情源。
+- 增加活跃上游 `electricgoat/ba-data@global`：可按 GroupId 导入最新 ScenarioScript，优先使用 `TextTw`，没有时再回退 JP/EN。
+- GameKee 不作为整站主数据源；支持直接给出 GameKee BA 页面 URL 进行单页补充，避免依赖脆弱的站内搜索/全站 HTML 爬虫。
+- `HePudding/ba-storybook` 继续作为解析/分类参考，不再假设它是持续更新的数据源。
+- WebUI 配置显示名已缩短，详细说明移动到 hint；底层配置 key 保持不变，避免升级后已有配置失效。
+
+BA 手动同步示例：
+
+```text
+/游戏知识库同步 ba 40
+/游戏知识库同步 ba 30 upstream
+/游戏知识库同步 ba 10 upstream 59999
+/游戏知识库同步 ba 1 https://www.gamekee.com/ba/xxxxxx.html
+```
+
+其中普通 `ba` 同步优先使用 ba-archive 简中内容；`upstream` / `latest` 使用 electricgoat 活跃上游；GameKee 目前只作为明确 URL 的补充源。
+
 ## 设计目标
 
 ### 1. 不再需要手动初始化
@@ -100,14 +123,30 @@ class NewGameAdapter(BaseAdapter):
 
 ### Blue Archive 默认内容
 
+优先简中来源 `ba-archive/blue-archive`：
+
 - 学生静态资料：`apps/blue-archive-story-editor/src/assets/students.json`
 - 剧情：`apps/blue-archive-story-viewer/public/story/`
   - `main`
   - `other`
   - `event`
   - `favor`
-- 默认明确排除 `public/story/ai/`，避免把 AI 生成摘要作为首选事实来源。
-- 不抓 `BlueArchiveAPI` 的 `current/upcoming` Raid、Banner 等实时状态。
+- 明确排除 `public/story/ai/`。
+
+活跃补充来源 `electricgoat/ba-data@global`：
+
+- `ScenarioScriptMain1..5`
+- `ScenarioScriptEvent1..5`
+- `ScenarioScriptFavor1..5`
+- `ScenarioScriptGroup1..5`
+- 按 GroupId 拆成独立文档，优先采用国际服 `TextTw`。
+
+GameKee：
+
+- 不做整站默认抓取；
+- 只有显式传入 BA 页面 URL 时作为 Wiki 单页补充。
+
+仍然不把当前 Banner、Raid、排名等实时状态写入长期 RAG。
 
 ### Project SEKAI 默认内容
 
@@ -276,7 +315,10 @@ cleaning_provider_id = <可选>
 ## 数据源与边界
 
 - 东方：<https://thbwiki.cc/>
-- Blue Archive 剧情站：<https://github.com/ba-archive/blue-archive>
+- Blue Archive 简中剧情站：<https://github.com/ba-archive/blue-archive>
+- Blue Archive 活跃数据上游：<https://github.com/electricgoat/ba-data>
+- Blue Archive Wiki 补充：<https://www.gamekee.com/ba/>
+- BA Storybook（解析/分类参考）：<https://github.com/HePudding/ba-storybook>
 - PJSK 剧情资源：<https://github.com/StarMoe-org/Moe-story>
 - PJSK master data：<https://github.com/Sekai-World/sekai-master-db-cn-diff>
 

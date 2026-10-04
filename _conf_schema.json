@@ -1,157 +1,188 @@
 {
   "enable_touhou": {
-    "description": "启用东方Project知识库",
+    "description": "启用东方",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "启用东方Project知识库"
   },
   "enable_blue_archive": {
-    "description": "启用 Blue Archive / 蔚蓝档案知识库",
+    "description": "启用 BA",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "启用 Blue Archive / 蔚蓝档案知识库"
   },
   "enable_pjsk": {
-    "description": "启用 Project SEKAI / 世界计划知识库",
+    "description": "启用 PJSK",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "启用 Project SEKAI / 世界计划知识库"
   },
   "touhou_kb_name": {
-    "description": "东方Project官方知识库名称；默认沿用原插件名称以便直接复用旧库",
+    "description": "东方 KB 名称",
     "type": "string",
-    "default": "东方Project知识库"
+    "default": "东方Project知识库",
+    "hint": "东方Project官方知识库名称；默认沿用原插件名称以便直接复用旧库"
   },
   "ba_kb_name": {
-    "description": "Blue Archive 官方知识库名称",
+    "description": "BA KB 名称",
     "type": "string",
-    "default": "Blue Archive知识库"
+    "default": "Blue Archive知识库",
+    "hint": "Blue Archive 官方知识库名称"
   },
   "pjsk_kb_name": {
-    "description": "Project SEKAI 官方知识库名称",
+    "description": "PJSK KB 名称",
     "type": "string",
-    "default": "Project SEKAI知识库"
+    "default": "Project SEKAI知识库",
+    "hint": "Project SEKAI 官方知识库名称"
   },
   "auto_bootstrap": {
-    "description": "插件加载后总会自动创建/复用已启用的官方知识库；此开关仅控制空库是否自动抓取第一批内容",
+    "description": "自动初始化",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "插件加载后总会自动创建/复用已启用的官方知识库；此开关仅控制空库是否自动抓取第一批内容"
   },
   "touhou_bootstrap_limit": {
-    "description": "东方首次自动同步最多抓取的 THBWiki 页面数",
+    "description": "东方首次同步上限",
     "type": "int",
-    "default": 40
+    "default": 40,
+    "hint": "东方首次自动同步最多抓取的 THBWiki 页面数"
   },
   "ba_bootstrap_limit": {
-    "description": "BA 首次自动同步最多处理的源文档数；学生目录固定优先，其后按主线/其他/活动/羁绊剧情顺序",
+    "description": "BA 首次同步上限",
     "type": "int",
-    "default": 40
+    "default": 40,
+    "hint": "默认从 ba-archive 的简中学生资料与剧情开始；若库里只有学生目录而没有剧情，会继续自动补库。"
   },
   "pjsk_bootstrap_limit": {
-    "description": "PJSK 首次自动同步最多处理的源文档数；角色/歌曲/世界观等基础资料固定优先",
+    "description": "PJSK 首次同步上限",
     "type": "int",
-    "default": 40
+    "default": 40,
+    "hint": "PJSK 首次自动同步最多处理的源文档数；角色/歌曲/世界观等基础资料固定优先"
   },
   "default_embedding_provider_id": {
-    "description": "默认 Embedding Provider ID；留空时自动使用第一个可用 Embedding Provider",
+    "description": "Embedding Provider",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "默认 Embedding Provider ID；留空时自动使用第一个可用 Embedding Provider"
   },
   "default_rerank_provider_id": {
-    "description": "默认 Rerank Provider ID；留空时自动使用第一个可用 Rerank Provider；没有则关闭重排",
+    "description": "Rerank Provider",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "默认 Rerank Provider ID；留空时自动使用第一个可用 Rerank Provider；没有则关闭重排"
   },
   "enable_routing": {
-    "description": "根据本轮文本关键词或人格绑定自动选择对应游戏知识库并使用 AstrBot 原生 KB 检索",
+    "description": "启用自动路由",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "根据本轮文本关键词或人格绑定自动选择对应游戏知识库并使用 AstrBot 原生 KB 检索"
   },
   "session_top_k": {
-    "description": "每个命中领域最终向 LLM 注入的知识块数量",
+    "description": "RAG 注入块数",
     "type": "int",
-    "default": 5
+    "default": 5,
+    "hint": "每个命中领域最终向 LLM 注入的知识块数量"
   },
   "remove_competing_tools": {
-    "description": "命中游戏知识库时临时移除网页搜索、Python、Shell 等竞争工具；默认关闭，避免影响普通 Agent 行为",
+    "description": "移除竞争工具",
     "type": "bool",
-    "default": false
+    "default": false,
+    "hint": "命中游戏知识库时临时移除网页搜索、Python、Shell 等竞争工具；默认关闭，避免影响普通 Agent 行为"
   },
   "enable_llm_cleaning": {
-    "description": "是否在专用 Parser 之后再使用 AstrBot 聊天模型清洗文本；默认关闭，适合未来接入噪声较大的普通网页源",
+    "description": "LLM 文本清洗",
     "type": "bool",
-    "default": false
+    "default": false,
+    "hint": "是否在专用 Parser 之后再使用 AstrBot 聊天模型清洗文本；默认关闭，适合未来接入噪声较大的普通网页源"
   },
   "cleaning_provider_id": {
-    "description": "用于知识清洗的聊天 Provider ID；留空时使用 AstrBot 当前默认聊天 Provider",
+    "description": "清洗 Provider",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "用于知识清洗的聊天 Provider ID；留空时使用 AstrBot 当前默认聊天 Provider"
   },
   "request_timeout_sec": {
-    "description": "抓取单个网页/Raw 文件的超时时间（秒）",
+    "description": "请求超时（秒）",
     "type": "float",
-    "default": 20
+    "default": 20,
+    "hint": "抓取单个网页/Raw 文件的超时时间（秒）"
   },
   "crawl_delay_ms": {
-    "description": "THBWiki BFS 页面之间的抓取间隔（毫秒）",
+    "description": "THBWiki 抓取间隔",
     "type": "int",
-    "default": 400
+    "default": 400,
+    "hint": "THBWiki BFS 页面之间的抓取间隔（毫秒）"
   },
   "http_user_agent": {
-    "description": "抓取网页/GitHub Raw 时使用的 User-Agent",
+    "description": "User-Agent",
     "type": "string",
-    "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "default": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "hint": "抓取网页/GitHub Raw 时使用的 User-Agent"
   },
   "http_proxy": {
-    "description": "抓取使用的 HTTP(S) 代理；留空表示跟随系统环境",
+    "description": "HTTP 代理",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "抓取使用的 HTTP(S) 代理；留空表示跟随系统环境"
   },
   "github_proxy_url": {
-    "description": "GitHub URL 前缀加速地址；可填写与 AstrBot 设置 → 网络 → GitHub 加速地址相同的值。仅作用于 github.com、raw.githubusercontent.com、api.github.com 等 GitHub 请求；留空直连",
+    "description": "GitHub 加速地址",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "填写与 AstrBot 设置 → 网络 → GitHub 加速地址相同的 URL 前缀；留空直连。"
   },
   "github_proxy_fallback_direct": {
-    "description": "GitHub 加速地址连续请求失败后是否回退 GitHub 直连；建议保持开启",
+    "description": "GitHub 失败回退",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "GitHub 加速地址连续请求失败后是否回退 GitHub 直连；建议保持开启"
   },
   "pre_chunk_max_chars": {
-    "description": "插件预切片时单块最大字符数",
+    "description": "预切片最大字符",
     "type": "int",
-    "default": 1200
+    "default": 1200,
+    "hint": "插件预切片时单块最大字符数"
   },
   "pre_chunk_overlap": {
-    "description": "插件预切片时相邻块重叠字符数",
+    "description": "预切片重叠字符",
     "type": "int",
-    "default": 120
+    "default": 120,
+    "hint": "插件预切片时相邻块重叠字符数"
   },
   "upload_batch_size": {
-    "description": "AstrBot KB 单次向量化上传批大小",
+    "description": "上传批大小",
     "type": "int",
-    "default": 4
+    "default": 4,
+    "hint": "AstrBot KB 单次向量化上传批大小"
   },
   "upload_tasks_limit": {
-    "description": "AstrBot KB 文档上传并发数；模型服务不稳定时建议为 1",
+    "description": "上传并发数",
     "type": "int",
-    "default": 1
+    "default": 1,
+    "hint": "AstrBot KB 文档上传并发数；模型服务不稳定时建议为 1"
   },
   "touhou_extra_keywords": {
-    "description": "额外东方路由关键词，逗号或换行分隔",
+    "description": "东方额外关键词",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "额外东方路由关键词，逗号或换行分隔"
   },
   "ba_extra_keywords": {
-    "description": "额外 BA 路由关键词，逗号或换行分隔",
+    "description": "BA 额外关键词",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "额外 BA 路由关键词，逗号或换行分隔"
   },
   "pjsk_extra_keywords": {
-    "description": "额外 PJSK 路由关键词，逗号或换行分隔",
+    "description": "PJSK 额外关键词",
     "type": "string",
-    "default": ""
+    "default": "",
+    "hint": "额外 PJSK 路由关键词，逗号或换行分隔"
   },
   "query_bootstrap_limit": {
-    "description": "若热加载或首次提问时命中的知识库仍为空，本轮提问前最多同步多少个源文档，用于兜底创建可用内容",
+    "description": "查询前补库上限",
     "type": "int",
-    "default": 20
+    "default": 20,
+    "hint": "若热加载或首次提问时命中的知识库仍为空，本轮提问前最多同步多少个源文档，用于兜底创建可用内容"
   }
 }

@@ -22,6 +22,16 @@ class BaseAdapter(ABC):
     def matches(self, text: str | None) -> bool:
         return contains_any(text, self.config.keywords)
 
+    def bootstrap_complete(self, doc_names: set[str]) -> bool:
+        """Return whether the native AstrBot KB already has enough seed content.
+
+        Most domains only need one document to prove that bootstrap succeeded.
+        Adapters may override this when a single catalogue/index document is not
+        sufficient; Blue Archive, for example, requires at least one story doc.
+        """
+
+        return bool(doc_names)
+
     @abstractmethod
     async def crawl(
         self,
