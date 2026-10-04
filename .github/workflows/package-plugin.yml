@@ -1,0 +1,38 @@
+name: package-plugin
+
+on:
+  push:
+    branches:
+      - package-v0.5.2
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build plugin zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/astrbot-game-kb
+          rsync -a \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'tests' \
+            --exclude '__pycache__' \
+            --exclude '*.pyc' \
+            ./ dist/astrbot-game-kb/
+          cd dist
+          zip -r astrbot-game-kb-v0.5.2.zip astrbot-game-kb
+
+      - name: Upload plugin zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: astrbot-game-kb-v0.5.2
+          path: dist/astrbot-game-kb-v0.5.2.zip
+          if-no-files-found: error
